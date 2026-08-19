@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Field Log — Rebuild Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  :root{
+    --bg:#14181c; --bg-panel:#1c2228; --line:#2a323a; --ink:#e7ecef; --ink-dim:#8b98a3;
+    --accent:#5fd0e8; --ember:#e88a4c; --ok:#6fbf7f;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg);
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:28px 28px; background-position:-1px -1px;
+    color:var(--ink); font-family:'Space Grotesk', sans-serif; min-height:100vh; padding:20px 14px 60px;
+  }
+  .wrap{ max-width:640px; margin:0 auto; }
+  header{ margin-bottom:16px; display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .eyebrow{ font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:.14em; color:var(--accent); text-transform:uppercase; }
+  h1{ font-size:26px; font-weight:700; margin:6px 0 0; letter-spacing:-.01em; }
+
+  .cleared-toggle{ display:flex; align-items:center; gap:8px; background:var(--bg-panel); border:1px solid var(--line);
+    border-radius:20px; padding:6px 12px; font-family:'JetBrains Mono', monospace; font-size:10.5px; color:var(--ink-dim);
+    white-space:nowrap; cursor:pointer; margin-top:4px; }
+  .switch{ width:30px; height:16px; border-radius:8px; background:var(--line); position:relative; flex:0 0 auto; }
+  .switch.on{ background:var(--ok); }
+  .switch::after{ content:''; position:absolute; width:12px; height:12px; border-radius:50%; background:var(--ink);
+    top:2px; left:2px; transition:left .15s ease; }
+  .switch.on::after{ left:16px; }
+
+  .tracks{ display:flex; gap:8px; margin:18px 0; }
+  .track-btn{ flex:1; background:var(--bg-panel); border:1px solid var(--line); color:var(--ink-dim);
+    font-family:'JetBrains Mono', monospace; font-size:11.5px; letter-spacing:.04em; padding:10px 6px;
+    border-radius:8px; cursor:pointer; text-align:center; }
+  .track-btn.active{ border-color:var(--accent); color:var(--accent); background:rgba(95,208,232,.08); }
+  .track-btn .hrs{ display:block; font-size:9.5px; opacity:.7; margin-top:2px; }
+
+  .section-label{ font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:.1em; color:var(--ink-dim);
+    text-transform:uppercase; margin:22px 0 10px; }
+
+  .panel{ background:var(--bg-panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:12px; }
+  .panel-title{ font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:space-between; }
+  .shuffle{ background:none; border:1px solid var(--line); color:var(--ink-dim); font-family:'JetBrains Mono', monospace;
+    font-size:10.5px; padding:5px 9px; border-radius:6px; cursor:pointer; }
+
+  .item{ padding:10px 0; border-top:1px solid var(--line); }
+  .item:first-of-type{ border-top:none; margin-top:10px; }
+  .item-row{ display:flex; align-items:flex-start; gap:12px; cursor:pointer; }
+  .checkbox{ width:20px; height:20px; border:1.5px solid var(--ink-dim); border-radius:5px; flex:0 0 auto; margin-top:1px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .checkbox.checked{ background:var(--ok); border-color:var(--ok); }
+  .checkbox.checked::after{ content:'✓'; color:#0c1114; font-size:13px; font-weight:700; }
+  .item-text{ font-size:14px; line-height:1.45; flex:1; }
+  .item-text.checked{ color:var(--ink-dim); text-decoration:line-through; text-decoration-color:var(--line); }
+  .item-note{ font-size:12px; color:var(--ink-dim); margin-top:2px; font-family:'JetBrains Mono', monospace; }
+  .info-tag{ font-family:'JetBrains Mono', monospace; font-size:10px; color:var(--accent); flex:0 0 auto; margin-top:2px; }
+  .detail{ font-size:12.5px; color:var(--ink-dim); line-height:1.6; margin:8px 0 2px 32px; padding-left:10px;
+    border-left:2px solid var(--line); display:none; }
+  .detail.open{ display:block; }
+
+  .goal-card{ background:var(--bg-panel); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:12px; }
+  .goal-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .goal-title{ font-size:15px; font-weight:600; }
+  .goal-count{ font-family:'JetBrains Mono', monospace; font-size:13px; color:var(--ink-dim); }
+  .goal-count b{ color:var(--accent); font-size:16px; }
+  .bar-track{ height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin-bottom:12px; }
+  .bar-fill{ height:100%; background:var(--accent); border-radius:3px; transition:width .2s ease; }
+  .menu-item{ padding:7px 0; border-top:1px solid var(--line); cursor:pointer; }
+  .menu-item:first-child{ border-top:none; }
+  .menu-item .name{ font-size:12.5px; color:var(--ink-dim); display:flex; justify-content:space-between; }
+  .menu-item .name b{ color:var(--ink); font-weight:500; }
+  .menu-item .lock{ color:var(--ember); }
+  .menu-detail{ font-size:12px; color:var(--ink-dim); line-height:1.6; margin-top:6px; display:none; }
+  .menu-detail.open{ display:block; }
+  .log-btn{ width:100%; background:var(--accent); color:#0c1114; border:none; padding:11px; border-radius:8px;
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px; cursor:pointer; margin-top:12px; }
+  .undo-btn{ width:100%; margin-top:8px; background:none; border:1px solid var(--line); color:var(--ink-dim);
+    padding:8px; border-radius:8px; font-size:12px; cursor:pointer; }
+
+  .week-summary{ font-family:'JetBrains Mono', monospace; font-size:11.5px; color:var(--ink-dim);
+    display:flex; justify-content:space-between; margin:6px 0 4px; }
+  .week-summary .num{ color:var(--ember); font-weight:700; font-size:14px; }
+  .footer-note{ text-align:center; color:var(--ink-dim); font-size:11px; margin-top:24px;
+    font-family:'JetBrains Mono', monospace; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Flexible mode</div>
+      <h1>Field Log</h1>
+    </div>
+    <div class="cleared-toggle" id="clearedToggle">
+      <span class="switch" id="clearedSwitch"></span>
+      <span id="clearedLabel">cleared</span>
+    </div>
+  </header>
+
+  <div class="tracks" id="trackButtons"></div>
+
+  <div class="section-label">Today — daily non-negotiable</div>
+  <div id="dailyPanel"></div>
+
+  <div class="section-label">This week's targets</div>
+  <div id="weekSummary"></div>
+  <div id="goalCards"></div>
+
+  <div class="footer-note">tap an item name for how-to · progress saves on this device · week resets automatically</div>
+</div>
+
+<script>
+const TRACKS = {
+  minimal:  { label:"Minimal",  hrs:"~3 hrs/wk", targets:{ strength:2 } },
+  standard: { label:"Standard", hrs:"~5 hrs/wk", targets:{ strength:3, movement:2 } },
+  full:     { label:"Full",     hrs:"~7 hrs/wk", targets:{ strength:4, movement:2, aerobic:2 } }
+};
+
+const DAILY_POOL = [
+  { text:"Shoulder ROM — band work, wall slides, scapular CARs", note:"stay pain-free",
+    detail:"External rotation: elbow at your side bent 90°, rotate forearm outward against a light band, slow and controlled. Wall slides: back against a wall, arms in a 'goalpost' shape, slide up and down keeping contact with the wall. Scapular CARs: draw slow, full circles with your shoulder blade, no weight — just controlled range." },
+  { text:"Hip/ankle/t-spine mobility",
+    detail:"90/90 hip switch: sit with both knees bent 90°, rotate your hips side to side without using your hands. Ankle rocks: kneeling lunge position, drive your knee forward over your toe without the heel lifting. T-spine rotation: on all fours or seated, hand behind head, rotate your elbow toward the ceiling and back." },
+  { text:"Nasal breathing block", note:"5 min",
+    detail:"Breathe in and out through the nose only, slow and relaxed, exhale longer than you inhale. Research shows nasal breathing increases nitric oxide and speeds post-exercise muscle recovery — but at true max effort it can cap how much air you move, so it's best for easy training, warm-ups, and recovery, not all-out sprints." },
+  { text:"Wim Hof rounds", note:"3-4 rounds, seated",
+    detail:"30-40 deep breaths (full inhale, passive exhale), then after the last exhale hold your breath as long as is comfortable, take one recovery breath and hold that 15 sec, repeat 3-4 rounds. Seated or lying down only, never in water or while driving. The landmark 2014 Radboud University study (Kox et al., PNAS) found trained people could voluntarily raise adrenaline and blunt their inflammatory response — real, replicated physiology." },
+  { text:"CO2 tolerance drill",
+    detail:"Sit quietly, breathe slow and nasal, then after a normal (not maximal) exhale, time how long you can comfortably hold. Do 3-4 rounds, exhales getting a little longer and gentler each round. Builds tolerance to rising CO2 — the actual trigger for 'needing to breathe' — which is directly useful for endurance pacing and staying calm under exertion." },
+  { text:"Cold exposure",
+    detail:"Cold shower building toward a short plunge, 1-3 min. Keep this a few hours away from strength sessions — cold water right after lifting has been shown to blunt the muscle-growth signal (Roberts et al. 2015, confirmed in a 2024 meta-analysis), though it doesn't seem to hurt endurance adaptations. Fine on rest days or after easy aerobic work." },
+  { text:"Foot/ankle barefoot balance work",
+    detail:"Single-leg balance, eyes open then closed, 30-60 sec per side. Add toe-yoga: lift just your big toe while the other four stay down, then reverse. Cheap and it carries directly into landing mechanics and pistol squat stability." }
+];
+const DAILY_COUNT = 4;
+
+const BLOCKS = {
+  strength: {
+    title: "Strength (light load, high rep)",
+    menu: [
+      { name:"DB bench, light + high reps", detail:"Light dumbbells, 20-30+ reps per set, controlled tempo. Push into the fatigue zone rather than adding weight — light-load, high-rep work builds real strength without loading the joint hard." },
+      { name:"Lat pulldown, light + high reps", detail:"Same idea — light weight, high reps close to fatigue, slow on the way up (the eccentric/lowering phase) to add time under tension." },
+      { name:"Bulgarian split squat / leg press", detail:"Rear foot elevated on a bench, front leg does the work, controlled descent to a comfortable depth." },
+      { name:"Hamstring curl variations", detail:"Machine curls, or slow negative nordic curls if you have a partner/anchor — emphasize the slow lowering phase." },
+      { name:"Core — hollow hold, dead bug, Pallof press", detail:"Hollow hold: on your back, arms/legs slightly off the floor, low back pressed down. Dead bug: from tabletop, extend opposite arm and leg without letting your back arch. Pallof press: band anchored to the side, press straight out in front of your chest resisting the pull to rotate." },
+      { name:"Pull-up progression (band-assisted / negatives)", locked:true, detail:"Band-assisted: loop a thick band under your foot or knee on the bar for assistance. Negatives: jump/step to the top position and lower yourself slowly, 3-5 sec. This is hanging/distraction load through the shoulder — confirm with your surgeon/PT before starting." },
+      { name:"Dip progression", locked:true, detail:"Bench dips → band-assisted bar dips → full dips. Warm the shoulder thoroughly first." },
+      { name:"Handstand progression", locked:true, detail:"Start wall-supported (chest-to-wall or back-to-wall), build hold time before ever attempting freestanding." },
+      { name:"Muscle-up prep", locked:true, detail:"Combines pull-up strength, dip strength, and a transition drill (false-grip pull to high chest, punch through to support). Usually the last skill unlocked, not the first — don't rush it." }
+    ]
+  },
+  movement: {
+    title: "Grip + Natural Movement",
+    menu: [
+      { name:"Farmer carries", detail:"Moderate-heavy dumbbells or kettlebells, walk for time or distance, shoulders back, core braced." },
+      { name:"Towel/thick-bar grip holds", detail:"Wrap a towel over a pull-up bar or pulldown handle and hold as long as you can — builds grip strength without needing an actual fat bar." },
+      { name:"Toe yoga / barefoot balance", detail:"Single-leg stance, plus lifting your big toe alone and then the other four alone — rebuilds foot strength most people never train." },
+      { name:"Bear crawl", detail:"Hands and feet on the ground, knees hovering just above the floor, move forward keeping hips level. Only once PT has specifically cleared this loading pattern." },
+      { name:"Dead hangs", locked:true, detail:"Hang from a pull-up bar, shoulders relaxed, build time gradually from seconds up. This is the exact hanging load to get an explicit yes/no on from your surgeon or PT first." },
+      { name:"Overhead waiter's carry", locked:true, detail:"Carry a light dumbbell overhead in one hand while walking — builds shoulder stability at end-range once you're cleared for overhead loading." }
+    ]
+  },
+  aerobic: {
+    title: "Easy Aerobic",
+    menu: [
+      { name:"Bike or erg, easy effort, nasal breathing", detail:"Keep it conversational — if you can't breathe comfortably through your nose, you're going too hard. Easy 'Zone 2' effort builds real aerobic volume at low recovery cost and pairs naturally with the nasal breathing practice above, but be aware the popular claim that it's uniquely optimal for mitochondrial adaptation is contested — a 2025 review (Storoschuk et al.) found higher-intensity work drives bigger mitochondrial gains in head-to-head comparisons. Treat this as your low-cost volume, not your only aerobic tool. Cold exposure is fine after this (unlike after strength work) since it doesn't blunt endurance adaptations." }
+    ]
+  }
+};
+
+let state = { track:"standard", cleared:false };
+let dailyChecks = {}, dailyPicks = {}, weekLog = {};
+let openDetails = new Set(); // ephemeral, not persisted
+
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+function weekKeyNow(){
+  const d = new Date();
+  const onejan = new Date(d.getFullYear(),0,1);
+  const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay()+1)/7);
+  return `${d.getFullYear()}-W${week}`;
+}
+async function loadAll(){
+  try { const v = localStorage.getItem('flex-state'); if (v) state = JSON.parse(v); } catch(e){}
+  try { const v = localStorage.getItem('flex-daily-checks'); if (v) dailyChecks = JSON.parse(v); } catch(e){}
+  try { const v = localStorage.getItem('flex-daily-picks'); if (v) dailyPicks = JSON.parse(v); } catch(e){}
+  try { const v = localStorage.getItem('flex-week-log'); if (v) weekLog = JSON.parse(v); } catch(e){}
+}
+async function save(key, obj){ try { localStorage.setItem(key, JSON.stringify(obj)); } catch(e){} }
+
+function getTodayPicks(){
+  const tk = todayKey();
+  if (!dailyPicks[tk]) {
+    const idxs = [...Array(DAILY_POOL.length).keys()];
+    idxs.sort(()=>Math.random()-0.5);
+    dailyPicks[tk] = idxs.slice(0, DAILY_COUNT);
+    save('flex-daily-picks', dailyPicks);
+  }
+  return dailyPicks[tk];
+}
+function shuffleToday(){
+  const tk = todayKey();
+  const idxs = [...Array(DAILY_POOL.length).keys()];
+  idxs.sort(()=>Math.random()-0.5);
+  dailyPicks[tk] = idxs.slice(0, DAILY_COUNT);
+  save('flex-daily-picks', dailyPicks);
+  renderDaily();
+}
+
+function renderClearedToggle(){
+  const sw = document.getElementById('clearedSwitch');
+  sw.className = 'switch' + (state.cleared ? ' on' : '');
+  document.getElementById('clearedToggle').onclick = () => {
+    state.cleared = !state.cleared;
+    save('flex-state', state);
+    renderAll();
+  };
+}
+
+function renderTracks(){
+  const el = document.getElementById('trackButtons');
+  el.innerHTML = '';
+  Object.entries(TRACKS).forEach(([key,t])=>{
+    const btn = document.createElement('button');
+    btn.className = 'track-btn' + (state.track===key?' active':'');
+    btn.innerHTML = `${t.label}<span class="hrs">${t.hrs}</span>`;
+    btn.onclick = () => { state.track = key; save('flex-state', state); renderAll(); };
+    el.appendChild(btn);
+  });
+}
+
+function renderDaily(){
+  const el = document.getElementById('dailyPanel');
+  const tk = todayKey();
+  const picks = getTodayPicks();
+  let checkedCount = 0;
+  const itemsHtml = picks.map(idx => {
+    const item = DAILY_POOL[idx];
+    const key = `${tk}_${idx}`;
+    const isChecked = !!dailyChecks[key];
+    if (isChecked) checkedCount++;
+    const detailKey = `daily_${idx}`;
+    const isOpen = openDetails.has(detailKey);
+    return `<div class="item">
+      <div class="item-row">
+        <div class="checkbox ${isChecked?'checked':''}" data-check="${key}"></div>
+        <div class="item-text ${isChecked?'checked':''}" data-detail="${detailKey}">${item.text}</div>
+        <div class="info-tag" data-detail="${detailKey}">ⓘ</div>
+      </div>
+      ${item.note?`<div class="item-note">${item.note}</div>`:''}
+      <div class="detail ${isOpen?'open':''}" id="detail-${detailKey}">${item.detail}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="panel">
+    <div class="panel-title">Today's picks (${checkedCount}/${picks.length})
+      <button class="shuffle" id="shuffleBtn">↻ shuffle</button>
+    </div>
+    ${itemsHtml}
+  </div>`;
+
+  document.getElementById('shuffleBtn').onclick = shuffleToday;
+  el.querySelectorAll('[data-check]').forEach(cb=>{
+    cb.addEventListener('click', async ()=>{
+      dailyChecks[cb.dataset.check] = !dailyChecks[cb.dataset.check];
+      await save('flex-daily-checks', dailyChecks);
+      renderDaily();
+    });
+  });
+  el.querySelectorAll('[data-detail]').forEach(node=>{
+    node.addEventListener('click', ()=>{
+      const k = node.dataset.detail;
+      if (openDetails.has(k)) openDetails.delete(k); else openDetails.add(k);
+      renderDaily();
+    });
+  });
+}
+
+function renderWeekSummary(){
+  const el = document.getElementById('weekSummary');
+  const targets = TRACKS[state.track].targets;
+  const wk = weekKeyNow();
+  let totalDone = 0, totalGoal = 0;
+  Object.entries(targets).forEach(([type,goal])=>{
+    totalDone += (weekLog[`${wk}_${type}`] || 0);
+    totalGoal += goal;
+  });
+  el.innerHTML = `<div class="week-summary"><span>this week</span><span class="num">${totalDone} / ${totalGoal} sessions</span></div>`;
+}
+
+function renderGoalCards(){
+  const el = document.getElementById('goalCards');
+  el.innerHTML = '';
+  const targets = TRACKS[state.track].targets;
+  const wk = weekKeyNow();
+
+  Object.entries(targets).forEach(([type, goal])=>{
+    const block = BLOCKS[type];
+    const logKey = `${wk}_${type}`;
+    const done = weekLog[logKey] || 0;
+    const pct = Math.min(100, Math.round((done/goal)*100));
+
+    const visibleMenu = block.menu.filter(m => !m.locked || state.cleared);
+    const menuHtml = visibleMenu.map((m, i) => {
+      const dKey = `${type}_${i}`;
+      const isOpen = openDetails.has(dKey);
+      return `<div class="menu-item" data-detail="${dKey}">
+        <div class="name"><b>${m.name}</b>${m.locked?'<span class="lock">post-clearance</span>':''}</div>
+        <div class="menu-detail ${isOpen?'open':''}">${m.detail}</div>
+      </div>`;
+    }).join('');
+
+    const card = document.createElement('div');
+    card.className = 'goal-card';
+    card.innerHTML = `
+      <div class="goal-top">
+        <div class="goal-title">${block.title}</div>
+        <div class="goal-count"><b>${done}</b> / ${goal} this week</div>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+      ${menuHtml}
+      <button class="log-btn" data-type="${type}">Log a session</button>
+      ${done>0 ? `<button class="undo-btn" data-type="${type}">undo last</button>` : ''}
+    `;
+    el.appendChild(card);
+  });
+
+  el.querySelectorAll('[data-detail]').forEach(node=>{
+    node.addEventListener('click', ()=>{
+      const k = node.dataset.detail;
+      if (openDetails.has(k)) openDetails.delete(k); else openDetails.add(k);
+      renderGoalCards();
+    });
+  });
+  el.querySelectorAll('.log-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const type = btn.dataset.type;
+      const wk = weekKeyNow();
+      const key = `${wk}_${type}`;
+      weekLog[key] = (weekLog[key]||0) + 1;
+      await save('flex-week-log', weekLog);
+      renderWeekSummary(); renderGoalCards();
+    };
+  });
+  el.querySelectorAll('.undo-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const type = btn.dataset.type;
+      const wk = weekKeyNow();
+      const key = `${wk}_${type}`;
+      weekLog[key] = Math.max(0, (weekLog[key]||0) - 1);
+      await save('flex-week-log', weekLog);
+      renderWeekSummary(); renderGoalCards();
+    };
+  });
+}
+
+function renderAll(){ renderClearedToggle(); renderTracks(); renderDaily(); renderWeekSummary(); renderGoalCards(); }
+(async ()=>{ await loadAll(); renderAll(); })();
+</script>
+</body>
+</html>
